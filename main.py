@@ -31,6 +31,20 @@ def draw_eyes(left_eye_center, right_eye_center):
     cv2.circle(img, left_eye_center, r, (0, 0, 0), width)
     cv2.circle(img, right_eye_center, r, (0, 0, 0), width)
 
+def draw_eye(center):
+    r = 20
+    width = 2
+    cv2.circle(img, center, r, (255, 255, 255), -1)
+    cv2.circle(img, center, r, (0, 0, 0), width)
+
+def draw_closed_eye(p, angle, tilt):
+    p1 = move(p, 30, angle-tilt)
+    p2 = move(p, 30, -angle-tilt)
+    points = np.array([p1, p, p2], dtype=np.int32)
+    cv2.polylines(img, [points], False, (0, 0, 0), 3)
+
+
+
 def draw_mouth(center, width, height, intersection, tilt):
     tilt *= 180/pi
     # bottom right
@@ -63,15 +77,6 @@ def draw(face, pose):
     #lip_l_o = [375, 321, 405, 314, 17, 84, 181, 91, 146, 61]
     #lip_u_i = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308]
     #lip_l_i = [324, 318, 402, 317, 14, 87, 178, 88, 95, 78]
-
-    #for i in lip_u_o:
-        #cv2.circle(img, point(face[i]), 2, (255, 0, 0), -1)
-    #for i in lip_l_o:
-        #cv2.circle(img, point(face[i]), 2, (255, 0, 0), -1)
-    '''for i in lip_u_i:
-        cv2.circle(img, point(face[i]), 2, (255, 0, 255), -1)
-    for i in lip_l_i:
-        cv2.circle(img, point(face[i]), 2, (255, 0, 255), -1)'''
 
     # mouth
     lip_u_center = point(face[13])
@@ -130,12 +135,17 @@ def draw(face, pose):
 
     eyes_center = rotate(pos, (pos[0], pos[1]+min(tilt_ud, 0.06)*600), tilt_h)
 
+    left_eye_vdist = distance(point(face[159]), point(face[145]))/eye_dist
+    right_eye_vdist = distance(point(face[386]), point(face[374]))/eye_dist
+
+    #print(left_eye_vdist)
+
     cv2.circle(img, (eyes_center[0]+int(tilt_lr*150), eyes_center[1]), 5, (0, 0, 255), -1)
 
     eyes_center = (eyes_center[0]+int(tilt_lr*150), eyes_center[1])
 
     h = 40*sin(pi/8)
-    w = 80*cos(pi/8)-abs(tilt_lr)*8/0.15
+    w = 80*cos(pi/8)-abs(tilt_lr)*8/0.5
 
     p = tilt_lr+0.5
 
@@ -148,7 +158,21 @@ def draw(face, pose):
     left_eye_pos = move(eyes_center, l_dist, pi-l_angle-tilt_h)
     right_eye_pos = move(eyes_center, r_dist, r_angle-tilt_h)
 
-    draw_eyes(left_eye_pos, right_eye_pos)
+    blink = 0.072
+
+    if left_eye_vdist < blink:
+        draw_closed_eye(move(left_eye_pos, 15, 2 * pi - tilt_h), 5 * pi / 6, tilt_h)
+    else:
+        draw_eye(left_eye_pos)
+
+    if right_eye_vdist < blink:
+        draw_closed_eye(move(right_eye_pos, 15, pi - tilt_h), pi / 6, tilt_h)
+    else:
+        draw_eye(right_eye_pos)
+
+
+
+    #draw_eye(right_eye_pos)
 
     # mouth
 
@@ -157,63 +181,34 @@ def draw(face, pose):
     lip_ud = distance(lip_u_center, lip_l_center)
     lip_lr = distance(lip_left, lip_right)
 
-    mouth_h = int(min(lip_ud/ eye_dist, 0.4)*100)
+    mouth_h = int(min(lip_ud/ eye_dist, 0.4)*90)
     mouth_w = int(lip_lr * 60 / eye_dist)
     lip_l_r = min(length(shortest_dist(lip_left, lip_u_center, lip_l_center) / max(lip_lr, 0.01)), 1)
-    lip_l = round(max(min(lip_l_r, 0.55), 0.45) * mouth_w)
-    #print(mouth_h)
+    lip_l = round(max(min(lip_l_r, 0.6), 0.4) * mouth_w)
+
+    # closed mouth
     if mouth_h < 6:
+        # shortest distance from lip upper center to horizontal line
         v = shortest_dist(lip_u_center, lip_left, lip_right)
+        # get sign of y component
         direction = copysign(1, v[1])
-        mouth_h = min(round(length(v)*160/eye_dist), 10)
-        #print(mouth_h)
+        v_length = length(v)
+        print(v_length)
+        mouth_h = min(round(v_length*160*max(4*cos((max(min(2.5, v_length*direction), 0.2)-1)), 1)/eye_dist), 10)
         draw_closed_mouth(mouth_center, mouth_w, mouth_h, lip_l, tilt_h, direction)
     else:
+        # open mouth
         lip_u_r = min(length(shortest_dist(lip_u_left, lip_left, lip_right) / max(lip_ud, 0.01)), 1)
         # print(lip_u_r, max(1.5*cos(8*(lip_u_r-0.38)), 1))
-        # print(lip_l_r)
-        # print(mouth_w, mouth_h)
 
         draw_mouth(mouth_center, mouth_w, mouth_h, (lip_l, round(
             lip_u_r * max(1.8 * cos(8 * (min(lip_u_r, 0.6) - 0.3)), 1) * mouth_h)), tilt_h)
 
-    #print(lip_ud/eye_dist)
-    #mouth_h = max(mouth_h, 0.02)
+    #cv2.polylines(img, [np.array([move(mouth_center, 100, pi/2-tilt_h), mouth_center, move(mouth_center, 100, 3*pi/2-tilt_h)], dtype=np.int32)], False, (255, 0, 0), 2)
 
-    #h = int(mouth_h*100)
-    #w = int(mouth_w*60)
-
-
-    #print(float_point(nose_bottom), nose_top, rotate(float_point(nose_bottom), nose_top, -tilt_h))
-
-    #cv2.circle(img, nose_top, 2, (255, 0, 0), -1)
-    #cv2.circle(img, nose_bottom, 2, (255, 0, 255), -1)
-
-    #cv2.circle(img, nose_left, 2, (255, 0, 0), -1)
-    #cv2.circle(img, nose_right, 2, (255, 0, 255), -1)
-
-    '''dist_lr = distance(nose_left, nose_right)
-    dist_tb = distance(nose_top, nose_bottom)
-    dist_tr = distance(nose_top, nose_right)
-    dist_tl = distance(nose_top, nose_left)
-    print(dist_tb/dist_lr)'''
-
-    #print(tilt_h, pi/4, 3*pi/4)
-
-    #cv2.ellipse(img, center, (50, 80), tilt_h * 180 / pi, 0, 360, (0, 0, 0), -1)
-    #cv2.circle(img, (center[0], center[1]+h//2), h//2, (255, 0, 0), -1)
-
-
-    #cv2.circle(img, center, 10, (255, 0, 0), -1)
     cv2.circle(img, left_eye_outer, 5, (0, 0, 255), -1)
     cv2.circle(img, right_eye_outer, 5, (255, 0, 255), -1)
 
-    #cv2.circle(img, face_center_line, 2, (255, 0, 0), -1)
-    #cv2.circle(img, point(face[10]), 2, (255, 0, 0), -1)
-
-    #print(distance(face_center_line, point(face[10]))/distance(left_eye_outer, right_eye_outer))
-
-    #cv2.circle(img, point(face[70]), 2, (255, 0, 0), -1)
 
 while cap.isOpened():
     s, img = cap.read()
